@@ -1,0 +1,89 @@
+#!/usr/bin/env ruby
+
+require 'twitter'
+require 'commander/import'
+require 'terminal-table'
+
+program :name, 'Twitter Rater'
+program :version, '1.0.0'
+program :description, 'Simple utility to find out who tweeted about something the most or what tweet about it was retweeted the most.'
+
+command :tweets do |c|
+  c.syntax = 'tweets #hashtag'
+  c.description = 'Display (number) of people who tweeted with #hashtag the most'
+  c.option '-n', '--number NUMBER', Integer, 'Number of results'
+  c.action do |args, options|
+    options.default number: 10
+    hashtag = args.first
+    TwitterRank.new(hashtag, options.number).most_tweets
+  end
+end
+
+command :retweets do |c|
+  c.syntax = 'retweets #hashtag'
+  c.description = 'Display (number) of tweets with #hashtag which have been retweeted the most'
+  c.option '-n', '--number NUMBER', Integer, 'Number of results'
+  c.action do |args, options|
+    options.default number: 10
+    hashtag = args.first
+    TwitterRank.new(hashtag, options.number).most_retweets
+  end
+end
+
+class TwitterRank
+  def initialize(hashtag, limit)
+    @tweets = Tweets.all(hashtag)
+    @limit = limit
+  end
+
+  def most_tweets
+    grouped_by_user = @tweets.group_by(&:from_user)
+    users_with_counts = grouped_by_user.map{|user, tweets| [user, tweets.size]}
+    data = users_with_counts.sort_by{|user, count| count}.reverse
+    print_table(['User', 'Tweet count'], data.take(@limit))
+  end
+
+  def most_retweets
+    retweets = @tweets.select{|tweet| tweet.full_text =~ /^RT @.*:/}
+    grouped_by_tweet = retweets.group_by(&:full_text)
+    user_tweet_counts = grouped_by_tweet.map do |text, tweets|
+      [extract_user(text), extract_tweet(text), tweets.size]
+    end
+    data = user_tweet_counts.sort_by{|user, tweet, count| count}.reverse
+    print_table(['User', 'Tweet', 'Re-tweet count'], data.take(@limit))
+  end
+
+  private
+
+  def print_table(headers, data)
+    puts Terminal::Table.new(headings: headers, rows: data)
+  end
+
+  def extract_user(text)
+    text[/RT @([^:]*):/, 1]
+  end
+
+  def extract_tweet(text)
+    tweet = text[/^RT @([^:]*):(.*)$/, 2]
+    if tweet.size > 50
+      tweet = tweet[0..50] + '...'
+    end
+    tweet
+  end
+end
+
+class Tweets
+  def self.all(hashtag)
+    all = []
+    page = 1
+
+    while true
+      part = Twitter.search(hashtag, rpp: 100, page: page)
+      break if part.empty?
+      all += part
+      page += 1
+    end
+
+    all
+  end
+end
