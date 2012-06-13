@@ -3,6 +3,7 @@
 require 'twitter'
 require 'commander/import'
 require 'terminal-table'
+require 'smart_colored/extend'
 
 program :name, 'Twitter Rater'
 program :version, '1.0.0'
@@ -56,6 +57,7 @@ class TwitterRank
   private
 
   def print_table(headers, data)
+    data = add_colors(data)
     puts Terminal::Table.new(headings: headers, rows: data)
   end
 
@@ -69,6 +71,18 @@ class TwitterRank
       tweet = tweet[0..50] + '...'
     end
     tweet
+  end
+
+  def add_colors(data)
+    colors = [:green, :yellow, :red]
+    colors.each_with_index do |color, idx|
+      data[idx] = colorize(data[idx], color) if data[idx]
+    end
+    data
+  end
+
+  def colorize(row, color)
+    row.map(&:to_s).map(&color)
   end
 end
 
